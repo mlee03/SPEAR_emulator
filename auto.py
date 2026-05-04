@@ -78,16 +78,25 @@ class AutoDataModule(pl.LightningDataModule):
         self.val_ds = AutoregressiveDataset(self.val_ds, lag=self.lag)
 
     def train_dataloader(self):
+        """
+        Returns a DataLoader for the training dataset.
+        """
         return torch.utils.data.DataLoader(
             self.training_ds, batch_size=32, shuffle=False
         )
 
     def val_dataloader(self):
+        """
+        Returns a DataLoader for the validation dataset.
+        """
         return torch.utils.data.DataLoader(
             self.val_ds, batch_size=32, shuffle=False
         )
 
-    def predict_dataloader(self):
+    def test_dataloader(self):
+        """
+        Returns a DataLoader for the testing dataset.
+        """
         return torch.utils.data.DataLoader(
             self.testing_ds, batch_size=32, shuffle=False
         )
