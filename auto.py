@@ -21,20 +21,52 @@ class AutoTrainModule(pl.LightningModule):
         self.save_hyperparameters()
         self.model = model
         self.learning_rate = learning_rate
+        self._val_z_means = []
+        self._val_target_means = []
+        self._train_z_means = []
+        self._train_target_means = []
 
     def training_step(self, batch, batch_idx):
         inputs, targets = batch
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
         self.log("train_loss", loss)
+        self._train_z_means.append(z.detach().mean().cpu().item())
+        self._train_target_means.append(targets.detach().mean().cpu().item())
         return loss
+
+    def on_train_epoch_end(self):
+        if (self.current_epoch + 1) % 100 == 0:
+            fig, ax = plt.subplots()
+            ax.plot(self._train_z_means, label="prediction mean")
+            ax.plot(self._train_target_means, label="target mean")
+            ax.set_xlabel("Batch")
+            ax.legend()
+            self.logger.experiment.add_figure("train prediction vs target", fig, self.current_epoch)
+            plt.close(fig)
+        self._train_z_means.clear()
+        self._train_target_means.clear()
 
     def validation_step(self, batch, batch_idx):
         inputs, targets = batch
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
         self.log("val_loss", loss)
+        self._val_z_means.append(z.detach().mean().cpu().item())
+        self._val_target_means.append(targets.detach().mean().cpu().item())
         return loss
+
+    def on_validation_epoch_end(self):
+        if (self.current_epoch + 1) % 100 == 0:
+            fig, ax = plt.subplots()
+            ax.plot(self._val_z_means, label="prediction mean")
+            ax.plot(self._val_target_means, label="target mean")
+            ax.set_xlabel("Batch")
+            ax.legend()
+            self.logger.experiment.add_figure("val prediction vs target", fig, self.current_epoch)
+            plt.close(fig)
+        self._val_z_means.clear()
+        self._val_target_means.clear()
 
     def predict_step(self, batch, batch_idx):
         inputs, targets = batch
