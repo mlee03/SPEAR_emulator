@@ -94,9 +94,11 @@ class AutoDataModule(pl.LightningDataModule):
         if training:
             self.ds.training = TrainingDataset(training_ds, lag=self.lag)
             self.ds.val = TrainingDataset(val_ds, lag=self.lag)
+            self.ds.testing = TrainingDataset(testing_ds, lag=self.lag)
         else:
-            self.ds.training = TestingDataset(training_ds, lag=self.lag, time=train_time)
-            self.ds.val = TestingDataset(val_ds, lag=self.lag, time=val_time)
+            self.ds.training = TestingDataset(training_ds, lag=self.lag, time=train_time[self.lag:])
+            self.ds.val = TestingDataset(val_ds, lag=self.lag, time=val_time[self.lag:])
+            self.ds.testing = TestingDataset(testing_ds, lag=self.lag, time=testing_time[self.lag:])
 
     def train_dataloader(self, batch_size: int = 32):
         """
@@ -112,4 +114,12 @@ class AutoDataModule(pl.LightningDataModule):
         """
         return torch.utils.data.DataLoader(
             self.ds.val, batch_size=batch_size, shuffle=False
+        )
+
+    def test_dataloader(self, batch_size: int = 32):
+        """
+        Returns a DataLoader for the validation dataset.
+        """
+        return torch.utils.data.DataLoader(
+            self.ds.test, batch_size=batch_size, shuffle=False
         )
