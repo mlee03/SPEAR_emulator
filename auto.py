@@ -31,7 +31,7 @@ class AutoTrainModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         inputs, targets = batch
         z = self.model(inputs)
-        loss = torch.nn.functional.mse_loss(inputs, targets)
+        loss = torch.nn.functional.mse_loss(z, targets)
         self.log("val_loss", loss)
         return loss
 
@@ -39,14 +39,16 @@ class AutoTrainModule(pl.LightningModule):
         inputs, targets = batch
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
+        print(loss.item())
         return z
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
         return optimizer
 
+
 class AutoDataModule(pl.LightningDataModule):
-    def __init__(self, datafile, variable, lag: int = 3, testsize = 0.2, valsize = 0.2):
+    def __init__(self, datafile, variable, lag: int = 3, testsize = 0.2, valsize = 0.3):
         super().__init__()
         self.save_hyperparameters()
 
@@ -56,21 +58,20 @@ class AutoDataModule(pl.LightningDataModule):
 
         self.ds = SimpleNamespace(
             training = None,
-            val = None
+            val = None, 
+            testing = None
         )
 
-        self.training_size = None
+        self.testsize = testsize
         self.valsize = valsize
 
-        self.training_ds = None
-        self.val_ds = None
 
     def setup(self, stage = None, training = True):
         with xr.open_dataset(self.datafile, decode_timedelta=True) as ds:
             data = ds[self.variable].values
             norm = data.mean()
             data = data/norm
-            ntimes = ds.sizes["times"]
+            ntimes = ds.sizes["time"]
             time = list(range(ntimes))
 
         train_time, testing_time, train_ds, testing_ds = train_test_split(
@@ -86,18 +87,18 @@ class AutoDataModule(pl.LightningDataModule):
             self.ds.training = TestingDataset(training_ds, lag=self.lag, time=train_time)
             self.ds.val = TestingDataset(val_ds, lag=self.lag, time=val_time)
 
-    def train_dataloader(self):
+    def train_dataloader(self, batch_size: int = 32):
         """
         Returns a DataLoader for the training dataset.
         """
         return torch.utils.data.DataLoader(
-            self.ds.training, batch_size=32, shuffle=False
+            self.ds.training, batch_size=batch_size, shuffle=False
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self, batch_size: int = 32):
         """
         Returns a DataLoader for the validation dataset.
         """
         return torch.utils.data.DataLoader(
-            self.ds.val, batch_size=32, shuffle=False
+            self.ds.val, batch_size=batch_size, shuffle=False
         )

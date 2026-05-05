@@ -43,6 +43,7 @@ class TestingDataset(torch.utils.data.Dataset):
         return len(self.data) - self.lag
 
     def __getitem__(self, idx):
+        
         return self.data[idx:idx+self.lag]
 
 
@@ -68,7 +69,4 @@ class SimpleCNN(torch.nn.Module):
     def forward(self, x):
         y = self.relu(self.cnn1(x))
         y = self.cnn2(y)
-        if self.eval():
-            return y[:,0,:,:]
-        else:
-            return y
+        return y.squeeze()
