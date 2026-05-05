@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import lightning as pl
+from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 import torch
 import xarray as xr
@@ -35,12 +36,18 @@ class AutoTrainModule(pl.LightningModule):
         self.log("val_loss", loss)
         return loss
 
-    def evaluate_step(self, batch, batch_idx):
+    def predict_step(self, batch, batch_idx):
         inputs, targets = batch
         z = self.model(inputs)
-        loss = torch.nn.functional.mse_loss(z, targets)
-        print(loss.item())
-        return z
+        loss = torch.nn.functional.mse_loss(z, targets)        
+
+        fig, ax = plt.subplots()
+        ax.plot([target.detach().to("cpu").mean() for target in targets], label="target mean")
+        ax.plot([iz.detach().to("cpu").mean() for iz in z], label="prediction mean")
+        ax.legend()
+
+        self.logger.experiment.add_figure("prediction vs target", fig, self.global_step)
+
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)

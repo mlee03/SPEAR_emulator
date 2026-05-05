@@ -24,5 +24,5 @@ if train:
     trainer.fit(model=model, datamodule=data)
 
 model.eval()
-y = trainer.evaluate(model=model, dataloaders=data.test_dataloader())
+y = trainer.predict(model=model, dataloaders=data.val_dataloader())
 print(y)
