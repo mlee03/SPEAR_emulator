@@ -17,4 +17,4 @@ trainer.fit(model=model, datamodule=data)
 #model = LitAutoCNN.load_from_checkpoint(latest_ckpt, weights_only=False)
 
 model.eval()
-trainer.test(model=model, dataloaders=data.test_dataloader())
+y = trainer.test(model=model, dataloaders=data.test_dataloader())

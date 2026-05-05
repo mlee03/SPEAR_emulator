@@ -1,16 +1,19 @@
+from types import SimpleNamespace
+
 import lightning as pl
 from sklearn.model_selection import train_test_split
 import torch
 import xarray as xr
 
 from base import (
-    AutoregressiveDataset,
+    TrainingDataset,
+    TestingDataset,
     SimpleCNN
 )
 
 
-class LitAutoCNN(pl.LightningModule):
-    """A Lightning autoencoder model."""
+class AutoTrainModule(pl.LightningModule):
+    """A Lightning auto training model."""
 
     def __init__(self, model, learning_rate=1e-3):
         super().__init__()
@@ -19,27 +22,23 @@ class LitAutoCNN(pl.LightningModule):
         self.learning_rate = learning_rate
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.model(x)
-        loss = torch.nn.functional.mse_loss(z, y)
+        inputs, targets = batch
+        z = self.model(inputs)
+        loss = torch.nn.functional.mse_loss(z, targets)
         self.log("train_loss", loss)
-        self.log("mean temperature", z.mean())
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.model(x)
-        loss = torch.nn.functional.mse_loss(z, y)
+        inputs, targets = batch
+        z = self.model(inputs)
+        loss = torch.nn.functional.mse_loss(inputs, targets)
         self.log("val_loss", loss)
-        self.log("mean temperature", z.mean())
         return loss
 
-    def test_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.model(x)
-        loss = torch.nn.functional.mse_loss(z, y)
-        self.log("test_loss", loss)
-        self.log("mean temperature", z.mean())
+    def evaluate_step(self, batch, batch_idx):
+        inputs, targets = batch
+        z = self.model(inputs)
+        loss = torch.nn.functional.mse_loss(z, targets)
         return z
 
     def configure_optimizers(self):
@@ -47,42 +46,52 @@ class LitAutoCNN(pl.LightningModule):
         return optimizer
 
 class AutoDataModule(pl.LightningDataModule):
-    def __init__(self, datafile, variable, lag: int = 3, testsize=0.2, valsize=0.2):
+    def __init__(self, datafile, variable, lag: int = 3, testsize = 0.2, valsize = 0.2):
         super().__init__()
         self.save_hyperparameters()
 
         self.datafile = datafile
         self.variable = variable
         self.lag = lag
-        self.testsize = testsize
+
+        self.ds = SimpleNamespace(
+            training = None,
+            val = None
+        )
+
+        self.training_size = None
         self.valsize = valsize
 
         self.training_ds = None
-        self.testing_ds = None
         self.val_ds = None
 
-    def setup(self, stage = None):
+    def setup(self, stage = None, training = True):
         with xr.open_dataset(self.datafile, decode_timedelta=True) as ds:
             data = ds[self.variable].values
             norm = data.mean()
             data = data/norm
+            ntimes = ds.sizes["times"]
+            time = list(range(ntimes))
 
-        train_val, self.testing_ds = train_test_split(
-            data, test_size=self.testsize, shuffle=False)[:2]
+        train_time, testing_time, train_ds, testing_ds = train_test_split(
+            time, data, test_size=self.testsize, shuffle=False)
 
-        self.training_ds, self.val_ds = train_test_split(
-            train_val, test_size=self.valsize, shuffle=False)[:2]
+        train_time, val_time, training_ds, val_ds = train_test_split(
+            train_time, train_ds, test_size=self.valsize, shuffle=False)
 
-        self.training_ds = AutoregressiveDataset(self.training_ds, lag=self.lag)
-        self.testing_ds = AutoregressiveDataset(self.testing_ds, lag=self.lag)
-        self.val_ds = AutoregressiveDataset(self.val_ds, lag=self.lag)
+        if training:
+            self.ds.training = TrainingDataset(training_ds, lag=self.lag)
+            self.ds.val = TrainingDataset(val_ds, lag=self.lag)
+        else:
+            self.ds.training = TestingDataset(training_ds, lag=self.lag, time=train_time)
+            self.ds.val = TestingDataset(val_ds, lag=self.lag, time=val_time)
 
     def train_dataloader(self):
         """
         Returns a DataLoader for the training dataset.
         """
         return torch.utils.data.DataLoader(
-            self.training_ds, batch_size=32, shuffle=False
+            self.ds.training, batch_size=32, shuffle=False
         )
 
     def val_dataloader(self):
@@ -90,13 +99,5 @@ class AutoDataModule(pl.LightningDataModule):
         Returns a DataLoader for the validation dataset.
         """
         return torch.utils.data.DataLoader(
-            self.val_ds, batch_size=32, shuffle=False
-        )
-
-    def test_dataloader(self):
-        """
-        Returns a DataLoader for the testing dataset.
-        """
-        return torch.utils.data.DataLoader(
-            self.testing_ds, batch_size=32, shuffle=False
+            self.ds.val, batch_size=32, shuffle=False
         )

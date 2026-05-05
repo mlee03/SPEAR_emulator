@@ -6,7 +6,7 @@ import torch
 import xarray as xr
 
 
-class AutoregressiveDataset(torch.utils.data.Dataset):
+class TrainingDataset(torch.utils.data.Dataset):
     """A PyTorch Dataset for NetCDF data."""
 
     def __init__(
@@ -23,6 +23,27 @@ class AutoregressiveDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx:idx+self.lag], self.data[idx+self.lag]
+
+
+class TestingDataset(torch.utils.data.Dataset):
+    """A PyTorch Dataset for NetCDF data."""
+
+    def __init__(
+        self,
+        data: np.ndarray = None,
+        time: list|np.ndarray = None,
+        lag: int = 3,
+    ):
+        super().__init__()
+        self.data = data
+        self.time = time
+        self.lag = lag
+
+    def __len__(self):
+        return len(self.data) - self.lag
+
+    def __getitem__(self, idx):
+        return self.data[idx:idx+self.lag]
 
 
 class SimpleCNN(torch.nn.Module):
