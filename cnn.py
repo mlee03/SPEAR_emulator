@@ -7,10 +7,10 @@ from pathlib import Path
 cnn = SimpleCNN()
 
 reload = False
-train = False
+train = True
 
 if reload:
-    latest_ckpt = "/home/Mikyung.Lee/spear-emulator-me/lightning_logs/version_0/checkpoints/epoch=999-step=11000.ckpt"
+    latest_ckpt = "/home/Mikyung.Lee/spear-emulator-me/lightning_logs/version_0/checkpoints/epoch=999-step=10000.ckpt"
     model = AutoTrainModule.load_from_checkpoint(latest_ckpt, weights_only=False)
 else:
     model = AutoTrainModule(cnn)
@@ -18,7 +18,7 @@ else:
 data = AutoDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref")
 data.setup()
 
-trainer = pl.Trainer(max_epochs=1)
+trainer = pl.Trainer(max_epochs=5000)
 
 if train:
     trainer.fit(model=model, datamodule=data)
