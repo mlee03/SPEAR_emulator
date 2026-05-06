@@ -1,62 +1,46 @@
-import lightning as pl
-from base import SimpleCNN
-from auto import AutoTrainModule, AutoDataModule
 from pathlib import Path
+
+import lightning as pl
+from matplotlib import pyplot as plt
+
+from base import SimpleCNN, PredictDataset
+from auto import AutoTrainModule, AutoDataModule
+
 
 
 cnn = SimpleCNN()
 
-reload = False
-train = True
+reload = True
+train = False
 
 if reload:
-    latest_ckpt = "/home/Mikyung.Lee/spear-emulator-me/lightning_logs/version_0/checkpoints/epoch=999-step=10000.ckpt"
-    model = AutoTrainModule.load_from_checkpoint(latest_ckpt, weights_only=False)
+    latest_ckpt = "/home/Mikyung.Lee/spear-emulator-me/lightning_logs/version_0/checkpoints/epoch=4999-step=50000.ckpt"
+    model = AutoTrainModule.load_from_checkpoint(latest_ckpt, weights_only=False, map_location="cpu")
 else:
     model = AutoTrainModule(cnn)
 
-data = AutoDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref")
-data.setup()
-
-trainer = pl.Trainer(max_epochs=5000)
 
 if train:
+    data = AutoDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref")
+    data.setup()
+    trainer = pl.Trainer(max_epochs=5000)
     trainer.fit(model=model, datamodule=data)
 
-def get_mean(data):
-    mean = []
-    for batch in data:
-        mean.extend([idata.deteach().to("cpu").mean() for idata in y[batch]])
-    return mean
+# evaluate
+cnn.eval()
+cnn.cpu()
+data = PredictDataset(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", lag=3)
 
+for itime in range(data.ntimes):
+    print(itime)    
+    inputs = data.get_inputs()
+    z = cnn(inputs)    
+    data.add(z)
 
-## evaluate
-
-model.eval()
-data = AutoDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", testsize=1)
-data.setup(training=False)
-
-inputs = data.ds.testing[0]
-ntest_times = len(data.ds.testing)
-predicted = []
-for itime in range(ntest_times):
-    z = model(inputs)
-    predicted.append(z.detach().to("cpu").item().mean())
-    inputs = predicted[-3:]
-
-answers = [data.ds.testing.data[itime].mean() for itime in range(3, ntest_times)]
+predicted_mean = [ipredicted.detach().mean() for ipredicted in data.predictions]
 
 fig, ax = plt.subplots()
-ax.plot(data.ds.testing.time, predicted)
-ax.plot(data.ds.testing,time, )
+ax.plot(predicted_mean)
+plt.show()
 
 
-
-#mean of validated
-#y = trainer.predict(model=model, dataloaders=data.val_dataloader)
-#val_mean = get_mean(y)
-#y = trainer.predict(model=model, dataloaders=data.train_dataloader)
-#train_mean = get_mean(y)
-
-#predict
-for input in data.

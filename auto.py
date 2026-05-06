@@ -8,7 +8,6 @@ import xarray as xr
 
 from base import (
     TrainingDataset,
-    TestingDataset,
     SimpleCNN
 )
 
@@ -42,18 +41,6 @@ class AutoTrainModule(pl.LightningModule):
     #def on_validation_epoch_end(self):
     #    pass
 
-    def predict_step(self, batch, batch_idx):
-        inputs, targets = batch
-        z = self.model(inputs)
-        loss = torch.nn.functional.mse_loss(z, targets)        
-
-        fig, ax = plt.subplots()
-        ax.plot([target.detach().to("cpu").mean() for target in targets], label="target mean")
-        ax.plot([iz.detach().to("cpu").mean() for iz in z], label="prediction mean")
-        ax.legend()
-
-        self.logger.experiment.add_figure("prediction vs target", fig, self.global_step)
-
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
         return optimizer
@@ -70,8 +57,7 @@ class AutoDataModule(pl.LightningDataModule):
 
         self.ds = SimpleNamespace(
             training = None,
-            val = None, 
-            testing = None
+            val = None
         )
 
         self.testsize = testsize
@@ -82,23 +68,16 @@ class AutoDataModule(pl.LightningDataModule):
             data = ds[self.variable].values
             norm = data.mean()
             data = data/norm
-            ntimes = ds.sizes["time"]
-            time = list(range(ntimes))
 
-        train_time, testing_time, train_ds, testing_ds = train_test_split(
+        train_ds, testing_ds = train_test_split(
             time, data, test_size=self.testsize, shuffle=False)
 
-        train_time, val_time, training_ds, val_ds = train_test_split(
+        training_ds, val_ds = train_test_split(
             train_time, train_ds, test_size=self.valsize, shuffle=False)
 
         if training:
             self.ds.training = TrainingDataset(training_ds, lag=self.lag)
             self.ds.val = TrainingDataset(val_ds, lag=self.lag)
-            self.ds.testing = TrainingDataset(testing_ds, lag=self.lag)
-        else:
-            self.ds.training = TestingDataset(training_ds, lag=self.lag, time=train_time[self.lag:])
-            self.ds.val = TestingDataset(val_ds, lag=self.lag, time=val_time[self.lag:])
-            self.ds.testing = TestingDataset(testing_ds, lag=self.lag, time=testing_time[self.lag:])
 
     def train_dataloader(self, batch_size: int = 32):
         """
@@ -114,12 +93,4 @@ class AutoDataModule(pl.LightningDataModule):
         """
         return torch.utils.data.DataLoader(
             self.ds.val, batch_size=batch_size, shuffle=False
-        )
-
-    def test_dataloader(self, batch_size: int = 32):
-        """
-        Returns a DataLoader for the validation dataset.
-        """
-        return torch.utils.data.DataLoader(
-            self.ds.test, batch_size=batch_size, shuffle=False
         )

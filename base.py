@@ -25,33 +25,43 @@ class TrainingDataset(torch.utils.data.Dataset):
         return self.data[idx:idx+self.lag], self.data[idx+self.lag]
 
 
-class TestingDataset(torch.utils.data.Dataset):
+class PredictDataset():
     """A PyTorch Dataset for NetCDF data."""
 
     def __init__(
         self,
+        datafile: str|Path = None,
         data: np.ndarray = None,
-        time: list|np.ndarray = None,
+        variable: str = None,
         lag: int = 3,
     ):
         super().__init__()
-        self.data = data
-        self.time = time
+
+        self.datafile = datafile
+        self.variable = variable
+
+        with xr.open_dataset(self.datafile, decode_timedelta=True) as ds:
+            data = ds[self.variable].values
+            norm = data.mean()
+            self.data = data/norm
+            self.ntimes = ds.sizes["time"]
+            self.time = list(range(self.ntimes))
+
         self.lag = lag
+        self.predictions = torch.tensor(self.data[-self.lag:])
 
-    def __len__(self):
-        return len(self.data) - self.lag
+    def get_inputs(self):
+        return self.predictions[-self.lag:]
 
-    def __getitem__(self, idx):
-        
-        return self.data[idx:idx+self.lag]
+    def add(self, value):
+        self.predictions = torch.cat((self.predictions, value.unsqueeze(0)), dim=0)
 
 
 class SimpleCNN(torch.nn.Module):
     """A simple CNN model with one convolutional layer."""
 
     def __init__(self, in_channels: int = 3):
-        super().__init__()
+        super().__init__()        
         self.cnn1 = torch.nn.Conv2d(
             in_channels=in_channels,
             out_channels=2*in_channels,
