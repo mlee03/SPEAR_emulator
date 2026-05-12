@@ -5,8 +5,12 @@ from matplotlib import pyplot as plt
 import torch
 
 from model import TrainModule, SimpleCNN
-from data import AutoregressiveDataModule, PredictAutoregressiveDataset, load_variable
-
+from data import (
+    AutoDataModule, 
+    TrainingAutoregressiveDataset, 
+    PredictAutoregressiveDataset, 
+    load_variable
+)
 
 cnn = SimpleCNN()
 sequence_length = 3
@@ -28,7 +32,7 @@ else:
 trainer = pl.Trainer(max_epochs=max_epochs)
 
 if train:
-    data = AutoregressiveDataModule(raw_data, sequence_length=sequence_length).setup()
+    data = AutoDataModule(sequence_length=sequence_length, TrainingDatasetClass=TrainingAutoregressiveDataset).prepare(raw_data)
     trainer.fit(model=model, datamodule=data)
 
 
@@ -38,8 +42,8 @@ model.model.cpu()
 
 
 #first evaluation
-data = AutoregressiveDataModule(raw_data, sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup()
-inputs, targets = next(iter(data.train_dataloader(batch_size=len(data.training_ds))))
+data = AutoDataModule(sequence_length=sequence_length, train_size=0.999, val_size=0.001, TrainingDatasetClass=TrainingAutoregressiveDataset).prepare(raw_data)
+inputs, targets = next(iter(data.train_dataloader(batch_size=len(data.train_dataset))))
 with torch.no_grad():
     z = model.model(inputs)
 
