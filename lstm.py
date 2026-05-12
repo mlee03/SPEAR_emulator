@@ -35,6 +35,8 @@ if train:
         logger=tb_logger,
         enable_progress_bar=True,
         log_every_n_steps=1,
+        num_sanity_val_steps=0,
+       #fast_dev_run=True
     )
     datamodule = AutoLSTMDataModule(data, sequence_length=sequence_length).setup()
     trainer.fit(model=model, datamodule=datamodule)
@@ -60,7 +62,7 @@ ax.legend()
 #second evaluation
 datamodule = PredictLSTMDataset(data, sequence_length=sequence_length)
 with torch.no_grad():
-    for itime in range(sequence_length, data.ntimes):
+    for itime in range(sequence_length, datamodule.ntimes):
         inputs = datamodule.get_inputs()
         z = model.model(inputs)        
         datamodule.add(z)

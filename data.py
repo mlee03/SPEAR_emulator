@@ -16,7 +16,7 @@ class TrainingDataset(torch.utils.data.Dataset):
         sequence_length: int = 3,
     ):
         super().__init__()
-        self.data = torch.tensor(data)
+        self.data = torch.tensor(data, dtype=torch.float32)
         self.sequence_length = sequence_length
 
     def __len__(self):
@@ -45,7 +45,7 @@ class LSTMTrainingDataset(torch.utils.data.Dataset):
         sequence_length: int = 3,
     ):
         super().__init__()
-        self.data = torch.tensor(data)
+        self.data = torch.tensor(data, dtype=torch.float32)
         self.sequence_length = sequence_length
 
     def __len__(self):
@@ -96,10 +96,12 @@ class _BaseDataModule(pl.LightningDataModule):
 
     def train_dataloader(self, batch_size: int = 32):
         """Load training data onto DataLoader"""
+        print(f"Training dataset size: {len(self.training_ds)}")
         return torch.utils.data.DataLoader(self.training_ds, batch_size=batch_size, shuffle=False)
 
     def val_dataloader(self, batch_size: int = 32):
         """Load validation data onto DataLoader"""
+        print(f"Validation dataset size: {len(self.val_ds)}")
         return torch.utils.data.DataLoader(self.val_ds, batch_size=batch_size, shuffle=False)
 
 
@@ -121,8 +123,8 @@ class AutoregressiveDataModule(_BaseDataModule):
         self._print_split_sizes(train, val)
         self.training_ds = TrainingDataset(train, sequence_length=self.sequence_length)
         self.val_ds = TrainingDataset(val, sequence_length=self.sequence_length)
-        return self
 
+        return self
 
 
 class AutoLSTMDataModule(_BaseDataModule):
@@ -143,6 +145,7 @@ class AutoLSTMDataModule(_BaseDataModule):
         self._print_split_sizes(train, val)
         self.training_ds = LSTMTrainingDataset(train, sequence_length=self.sequence_length)
         self.val_ds = LSTMTrainingDataset(val, sequence_length=self.sequence_length)
+
         return self
 
 
@@ -168,7 +171,7 @@ class PredictAutoregressiveDataset():
             self.data = self.data / self.norm
 
         # initial predictions as the first sequence_length
-        self.predictions = torch.tensor(self.data[:self.sequence_length])
+        self.predictions = torch.tensor(self.data[:self.sequence_length], dtype=torch.float32)
 
     def get_inputs(self):
         """Returns the last sequence_length predictions as input."""

@@ -17,9 +17,11 @@ class TrainModule(pl.LightningModule):
     def training_step(self, batch, _batch_idx):
         """The training step"""
         inputs, targets = batch
+        inputs = inputs.float()
+        targets = targets.float()
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train_loss", loss)
         return loss
 
     def on_train_epoch_end(self):
@@ -28,9 +30,11 @@ class TrainModule(pl.LightningModule):
     def validation_step(self, batch, _batch_idx):
         """Validation step"""
         inputs, targets = batch
+        inputs = inputs.float()
+        targets = targets.float()
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_loss", loss)
         return loss
 
     def on_validation_epoch_end(self):

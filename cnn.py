@@ -39,9 +39,9 @@ model.model.cpu()
 
 #first evaluation
 data = AutoregressiveDataModule(raw_data, sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup()
-for (inputs, targets) in data.train_dataloader(batch_size=len(data.training_ds)):
-    with torch.no_grad():
-        z = model.model(inputs)
+inputs, targets = next(iter(data.train_dataloader(batch_size=len(data.training_ds))))
+with torch.no_grad():
+    z = model.model(inputs)
 
 fitted_mean = [iz.detach().mean() for iz in z]
 targets_mean = [target.detach().mean() for target in targets]
