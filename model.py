@@ -17,8 +17,6 @@ class TrainModule(pl.LightningModule):
     def training_step(self, batch, _batch_idx):
         """The training step"""
         inputs, targets = batch
-        inputs = inputs.float()
-        targets = targets.float()
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
         self.log("train_loss", loss)
@@ -30,8 +28,6 @@ class TrainModule(pl.LightningModule):
     def validation_step(self, batch, _batch_idx):
         """Validation step"""
         inputs, targets = batch
-        inputs = inputs.float()
-        targets = targets.float()
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
         self.log("val_loss", loss)
@@ -88,10 +84,10 @@ class SimpleCNN(torch.nn.Module):
 class SimpleLSTM(torch.nn.Module):
     """A simple LSTM model."""
 
-    def __init__(self, input_size: int = 1, hidden_size: int = 10, num_layers: int = 1):
+    def __init__(self, input_size: int = 1, output_size: int = 1, hidden_size: int = 10, num_layers: int = 1):
         super().__init__()
         self.lstm = torch.nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-        self.linear = torch.nn.Linear(hidden_size, 1)
+        self.linear = torch.nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
         lstm_out, _ = self.lstm(x)
