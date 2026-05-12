@@ -1,6 +1,5 @@
-from pathlib import Path
-
 import lightning as pl
+from lightning.pytorch.loggers import TensorBoardLogger
 from matplotlib import pyplot as plt
 import torch
 
@@ -15,11 +14,11 @@ lstm = SimpleLSTM(input_size=input_size)
 #read data
 data, ntimes, times = load_variable("data/atmos.192101-201012.t_ref.nc", "t_ref")
 
-reload = True
+reload = False
 train = True
 
-max_epochs = 1000
-saved_chkpt_path = Path("lightning_logs/version_0/checkpoints/epoch=4999-step=50000.ckpt")
+max_epochs = 5000
+#saved_chkpt_path = "lightning_logs/version_0/checkpoints/epoch=4999-step=50000.ckpt"
 
 if reload:
     model = TrainModule.load_from_checkpoint(saved_chkpt_path, weights_only=False, map_location="cpu")
@@ -27,7 +26,8 @@ else:
     model = TrainModule(lstm)
 
 if train:
-    trainer = pl.Trainer(max_epochs=max_epochs)
+    tb_logger = TensorBoardLogger(save_dir="learning-rate-scheduler", name="")
+    trainer = pl.Trainer(max_epochs=max_epochs, logger=tb_logger)
     datamodule = AutoLSTMDataModule(data, sequence_length=sequence_length).setup()
     trainer.fit(model=model, datamodule=datamodule)
 
@@ -63,12 +63,13 @@ ax.plot(datamodule.time, datamodule.predictions.detach().numpy(), label='predict
 ax.legend()
 ax.set_xlabel('time')
 ax.set_ylabel('value')
-plt.show()
 
 if train:
     if hasattr(trainer.logger, "experiment") and hasattr(trainer.logger.experiment, "add_figure"):
         trainer.logger.experiment.add_figure("fits", fig1, global_step=trainer.global_step)
         trainer.logger.experiment.add_figure("predictions", fig2, global_step=trainer.global_step)
         trainer.logger.experiment.flush()
+else:
+    plt.show()
 
 
