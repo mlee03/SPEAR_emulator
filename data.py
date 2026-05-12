@@ -7,7 +7,22 @@ import xarray as xr
 from sklearn.model_selection import train_test_split
 
 
-class TrainingDataset(torch.utils.data.Dataset):
+def load_variable(datafile: str | Path, variable: str) -> tuple[np.ndarray, int, list[int]]:
+    """Open a NetCDF file and return (values, ntimes, time) for the given variable."""
+    with xr.open_dataset(datafile, decode_timedelta=True) as ds:
+        data = ds[variable].values
+        ntimes = len(data)
+        time = list(range(ntimes))
+    return data, ntimes, time
+
+
+def normalize(data):
+    """Normalize data by mean"""
+    data = np.array(data)
+    return data/data.mean()
+
+
+class TrainingAutoregressiveDataset(torch.utils.data.Dataset):
     """A PyTorch Dataset for NetCDF data."""
 
     def __init__(
@@ -31,7 +46,7 @@ class TrainingDataset(torch.utils.data.Dataset):
         return self.data[idx:idx+self.sequence_length], self.data[idx+self.sequence_length]
 
 
-class LSTMTrainingDataset(torch.utils.data.Dataset):
+class TrainingLSTMDataset(torch.utils.data.Dataset):
     """A PyTorch Dataset for LSTM training on 1D time series (e.g. global means).
 
     Returns:
@@ -60,93 +75,48 @@ class LSTMTrainingDataset(torch.utils.data.Dataset):
         return self.data[idx:idx+self.sequence_length].unsqueeze(-1), self.data[idx+self.sequence_length]
 
 
-def load_variable(datafile: str | Path, variable: str) -> tuple[np.ndarray, int, list[int]]:
-    """Open a NetCDF file and return (values, ntimes, time) for the given variable."""
-    with xr.open_dataset(datafile, decode_timedelta=True) as ds:
-        data = ds[variable].values
-        ntimes = len(data)
-        time = list(range(ntimes))
-    return data, ntimes, time
+class AutoDataModule(pl.LightningDataModule):
+    """Data module for LSTM training on 1D global-mean time series."""
 
-
-class _BaseDataModule(pl.LightningDataModule):
-    """Shared logic for autoregressive data modules."""
-
-    def __init__(self, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
-        super().__init__()
-        self.save_hyperparameters()
+    def __init__(self, sequence_length: int = 3, train_size: float = 0.8, val_size: float = 0.3, TrainingDatasetClass: torch.utils.data.Dataset = TrainingLSTMDataset):
+        super().__init__()        
         self.sequence_length = sequence_length
-        self.trainingsize = trainingsize
-        self.valsize = valsize
-        self.norm = None
-        self.training_ds = None
-        self.val_ds = None
+        self.train_size = train_size
+        self.val_size = val_size
+        self.TrainingDatasetClass = TrainingDatasetClass
+        self.train_dataset = None
+        self.val_dataset = None
+        self.train_data = None
+        self.val_data = None
 
-    def _split(self, data):
-        train, val = train_test_split(
-            train_test_split(data, train_size=self.trainingsize, shuffle=False)[0],
-            test_size=self.valsize,
+    def prepare(self, data):
+        """prepare training and val set"""
+        self.train_data, self.val_data = train_test_split(
+            train_test_split(data, train_size=self.train_size, shuffle=False)[0],
+            test_size=self.val_size,
             shuffle=False,
         )
-        return train, val
+        
+        self.setup()
 
-    def _print_split_sizes(self, train, val):
-        print(f"Training size: {len(train)}")
-        print(f"Validation size: {len(val)}")
+        print(f"Training size: {len(self.train_data)}")
+        print(f"Validation size: {len(self.val_data)}")
+
+        return self
+        
+    def setup(self, stage = None):
+        """setup data"""
+
+        self.train_dataset = self.TrainingDatasetClass(self.train_data, sequence_length=self.sequence_length)
+        self.val_dataset = self.TrainingDatasetClass(self.val_data, sequence_length=self.sequence_length)
 
     def train_dataloader(self, batch_size: int = 32):
         """Load training data onto DataLoader"""
-        print(f"Training dataset size: {len(self.training_ds)}")
-        return torch.utils.data.DataLoader(self.training_ds, batch_size=batch_size, shuffle=False)
+        return torch.utils.data.DataLoader(self.train_dataset, batch_size=batch_size, shuffle=False)
 
     def val_dataloader(self, batch_size: int = 32):
         """Load validation data onto DataLoader"""
-        print(f"Validation dataset size: {len(self.val_ds)}")
-        return torch.utils.data.DataLoader(self.val_ds, batch_size=batch_size, shuffle=False)
-
-
-class AutoregressiveDataModule(_BaseDataModule):
-    """Data module for spatial autoregressive (CNN-style) training."""
-
-    def __init__(self, data: np.ndarray, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
-        super().__init__(sequence_length=sequence_length, trainingsize=trainingsize, valsize=valsize)
-        self._raw = data
-
-    def setup(self, stage = None, normalize: bool = True):
-        """setup data"""
-        data = np.array(self._raw)
-        if normalize:
-            self.norm = np.mean(data)
-            data = data / self.norm
-
-        train, val = self._split(data)
-        self._print_split_sizes(train, val)
-        self.training_ds = TrainingDataset(train, sequence_length=self.sequence_length)
-        self.val_ds = TrainingDataset(val, sequence_length=self.sequence_length)
-
-        return self
-
-
-class AutoLSTMDataModule(_BaseDataModule):
-    """Data module for LSTM training on 1D global-mean time series."""
-
-    def __init__(self, data: np.ndarray, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
-        super().__init__(sequence_length=sequence_length, trainingsize=trainingsize, valsize=valsize)
-        self._raw = data
-
-    def setup(self, stage = None, normalize: bool = True):
-        """setup data"""
-        data = np.array([datum.mean() for datum in self._raw])
-        if normalize:
-            self.norm = data.mean()
-            data = data / self.norm
-
-        train, val = self._split(data)
-        self._print_split_sizes(train, val)
-        self.training_ds = LSTMTrainingDataset(train, sequence_length=self.sequence_length)
-        self.val_ds = LSTMTrainingDataset(val, sequence_length=self.sequence_length)
-
-        return self
+        return torch.utils.data.DataLoader(self.val_dataset, batch_size=batch_size, shuffle=False)
 
 
 class PredictAutoregressiveDataset():
@@ -156,19 +126,14 @@ class PredictAutoregressiveDataset():
         self,
         data: np.ndarray,
         sequence_length: int = 3,
-        normalize: bool = True
     ):
         super().__init__()
 
         self.sequence_length = sequence_length
-        self.normalize = normalize
 
-        self.data = np.array(data)
+        self.data = data
         self.ntimes = len(self.data)
         self.time = list(range(self.ntimes))
-        if self.normalize:
-            self.norm = self.data.mean()
-            self.data = self.data / self.norm
 
         # initial predictions as the first sequence_length
         self.predictions = torch.tensor(self.data[:self.sequence_length], dtype=torch.float32)
@@ -189,19 +154,14 @@ class PredictLSTMDataset():
         self,
         data: np.ndarray,
         sequence_length: int = 3,
-        normalize: bool = True
     ):
         super().__init__()
 
-        self.normalize = normalize
         self.sequence_length = sequence_length
 
-        self.data = np.array([datum.mean() for datum in data])
+        self.data = data
         self.ntimes = len(self.data)
         self.time = list(range(self.ntimes))
-        if self.normalize:
-            self.norm = np.mean(self.data)
-            self.data = self.data / self.norm
 
         # initial predictions seeded from the first sequence_length timesteps
         self.predictions = torch.tensor(self.data[:self.sequence_length], dtype=torch.float32)

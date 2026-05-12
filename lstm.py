@@ -4,7 +4,13 @@ from matplotlib import pyplot as plt
 import torch
 
 from model import TrainModule, SimpleLSTM
-from data import AutoLSTMDataModule, PredictLSTMDataset, load_variable
+from data import (
+    AutoDataModule, 
+    PredictLSTMDataset, 
+    TrainingLSTMDataset, 
+    load_variable, 
+    normalize
+)
 
 #lstm parameters
 input_size = 1
@@ -13,6 +19,8 @@ lstm = SimpleLSTM(input_size=input_size)
 
 #read data
 data, ntimes, times = load_variable("data/atmos.192101-201012.t_ref.nc", "t_ref")
+data = [datum.mean() for datum in data]
+data = normalize(data)
 
 reload = False
 train = True
@@ -38,7 +46,7 @@ if train:
         num_sanity_val_steps=0,
        #fast_dev_run=True
     )
-    datamodule = AutoLSTMDataModule(data, sequence_length=sequence_length).setup()
+    datamodule = AutoDataModule(sequence_length=sequence_length, TrainingDatasetClass=TrainingLSTMDataset).prepare(data)
     trainer.fit(model=model, datamodule=datamodule)
 
 
@@ -48,8 +56,8 @@ model.model.cpu()
 
 
 #first evaluation
-datamodule = AutoLSTMDataModule(data, sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup()
-inputs, targets = next(iter(datamodule.train_dataloader(batch_size=len(datamodule.training_ds))))
+datamodule = AutoDataModule(sequence_length=sequence_length, train_size=0.999, val_size=0.001, TrainingDatasetClass=TrainingLSTMDataset).prepare(data)
+inputs, targets = next(iter(datamodule.train_dataloader(batch_size=len(datamodule.train_dataset))))
 with torch.no_grad():
     z = model.model(inputs)
         
@@ -64,7 +72,7 @@ datamodule = PredictLSTMDataset(data, sequence_length=sequence_length)
 with torch.no_grad():
     for itime in range(sequence_length, datamodule.ntimes):
         inputs = datamodule.get_inputs()
-        z = model.model(inputs)        
+        z = model.model(inputs)
         datamodule.add(z)
         
 fig2, ax = plt.subplots()
