@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import torch
 
 from base import SimpleLSTM, PredictLSTMDataset
-from auto import AutoregressiveTrainModule, AutoDataModule
+from auto import AutoregressiveTrainModule, AutoLSTMDataModule
 
 input_size = 1
 sequence_length = 5
@@ -26,7 +26,7 @@ else:
     model = AutoregressiveTrainModule(lstm, learning_rate=learning_rate)
 
 if train:
-    data = AutoDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length).setup_simple_lstm()
+    data = AutoLSTMDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length).setup()
     trainer.fit(model=model, datamodule=data)
 
 
@@ -36,7 +36,7 @@ model.model.cpu()
 
 
 #first evaluation
-data = AutoDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup_simple_lstm()
+data = AutoLSTMDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup()
 for (inputs, targets) in data.train_dataloader(batch_size=len(data.training_ds)):
     with torch.no_grad():
         z = model.model(inputs)
