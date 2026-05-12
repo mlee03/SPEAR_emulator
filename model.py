@@ -5,12 +5,14 @@ import torch
 class TrainModule(pl.LightningModule):
     """A Lightning auto training model."""
 
-    def __init__(self, model, learning_rate=1e-3):
+    def __init__(self, model, learning_rate=1e-3, lr_factor=0.5, lr_patience=10):
         """Constructor"""
         super().__init__()
         self.save_hyperparameters()
         self.model = model
         self.learning_rate = learning_rate
+        self.lr_factor = lr_factor
+        self.lr_patience = lr_patience
 
     def training_step(self, batch, batch_idx):
         """The training step"""
@@ -35,9 +37,11 @@ class TrainModule(pl.LightningModule):
         pass
 
     def configure_optimizers(self):
-        """ Configure Adam optimizer for training. """
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, factor=self.lr_factor, patience=self.lr_patience
+        )
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "monitor": "val_loss"}}
 
 
 class SimpleCNN(torch.nn.Module):

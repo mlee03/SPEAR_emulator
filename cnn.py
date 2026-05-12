@@ -4,12 +4,14 @@ import lightning as pl
 from matplotlib import pyplot as plt
 import torch
 
-from base import SimpleCNN, PredictAutoregressiveDataset
-from auto import AutoregressiveTrainModule, AutoregressiveDataModule
+from model import TrainModule, SimpleCNN
+from data import AutoregressiveDataModule, PredictAutoregressiveDataset, load_variable
 
 
 cnn = SimpleCNN()
 sequence_length = 3
+
+raw_data, _, _ = load_variable("data/atmos.192101-201012.t_ref.nc", "t_ref")
 
 reload = True
 train = False
@@ -19,14 +21,14 @@ learning_rate = 1e-3
 saved_chkpt_path = Path("lightning_logs/channels-3-6-1/checkpoints/epoch=4999-step=50000.ckpt")
 
 if reload:
-    model = AutoregressiveTrainModule.load_from_checkpoint(saved_chkpt_path, weights_only=False, map_location="cpu")
+    model = TrainModule.load_from_checkpoint(saved_chkpt_path, weights_only=False, map_location="cpu")
 else:
-    model = AutoregressiveTrainModule(cnn, learning_rate=learning_rate)
+    model = TrainModule(cnn, learning_rate=learning_rate)
 
 trainer = pl.Trainer(max_epochs=max_epochs)
 
 if train:
-    data = AutoregressiveDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length).setup()
+    data = AutoregressiveDataModule(raw_data, sequence_length=sequence_length).setup()
     trainer.fit(model=model, datamodule=data)
 
 
@@ -36,7 +38,7 @@ model.model.cpu()
 
 
 #first evaluation
-data = AutoregressiveDataModule(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup()
+data = AutoregressiveDataModule(raw_data, sequence_length=sequence_length, trainingsize=0.999, valsize=0.001).setup()
 for (inputs, targets) in data.train_dataloader(batch_size=len(data.training_ds)):
     with torch.no_grad():
         z = model.model(inputs)
@@ -51,7 +53,7 @@ ax.legend()
 
 
 #second evaluation
-data = PredictAutoregressiveDataset(datafile="data/atmos.192101-201012.t_ref.nc", variable="t_ref", sequence_length=sequence_length)
+data = PredictAutoregressiveDataset(raw_data, sequence_length=sequence_length)
 with torch.no_grad():
     for itime in range(sequence_length, data.ntimes):
         inputs = data.get_inputs()

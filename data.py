@@ -69,83 +69,12 @@ def load_variable(datafile: str | Path, variable: str) -> tuple[np.ndarray, int,
     return data, ntimes, time
 
 
-class PredictAutoregressiveDataset():
-    """A PyTorch Dataset for NetCDF data."""
-
-    def __init__(
-        self,
-        datafile: str|Path = None,
-        variable: str = None,
-        sequence_length: int = 3,
-        normalize: bool = True
-    ):
-        super().__init__()
-
-        self.datafile = datafile
-        self.variable = variable
-        self.sequence_length = sequence_length
-        self.normalize = normalize
-
-        self.data, self.ntimes, self.time = load_variable(self.datafile, self.variable)
-        if self.normalize:
-            self.norm = self.data.mean()
-            self.data = self.data / self.norm
-        
-        # initial predictions as the first sequence_length
-        self.predictions = torch.tensor(self.data[:self.sequence_length])
-
-    def get_inputs(self):
-        """Returns the last sequence_length predictions as input."""
-        return self.predictions[-self.sequence_length:]
-
-    def add(self, value):
-        """Adds a new prediction to the dataset."""
-        self.predictions = torch.cat((self.predictions, value.unsqueeze(0)), dim=0)
-
-
-class PredictLSTMDataset():
-    """A dataset for autoregressive prediction with an LSTM model on 1D time series (e.g. global means)."""
-
-    def __init__(
-        self,
-        datafile: str|Path = None,
-        variable: str = None,
-        sequence_length: int = 3,
-        normalize: bool = True
-    ):
-        super().__init__()
-
-        self.datafile = datafile
-        self.variable = variable
-        self.normalize = normalize
-        self.sequence_length = sequence_length        
-
-        data, self.ntimes, self.time = load_variable(self.datafile, self.variable)
-        self.data = np.array([datum.mean() for datum in data])
-        if self.normalize:
-            self.norm = np.mean(self.data)
-            self.data = self.data / self.norm
-
-        # initial predictions seeded from the first sequence_length timesteps
-        self.predictions = torch.tensor(self.data[:self.sequence_length], dtype=torch.float32)
-
-    def get_inputs(self):
-        """Returns the last sequence_length predictions as input of shape (1, sequence_length, 1)."""
-        return self.predictions[-self.sequence_length:].unsqueeze(0).unsqueeze(-1)  # (1, seq_len, 1)
-
-    def add(self, value):
-        """Adds a new scalar prediction to the dataset."""
-        self.predictions = torch.cat((self.predictions, value.detach().reshape(1)), dim=0)
-
-
 class _BaseDataModule(pl.LightningDataModule):
     """Shared logic for autoregressive data modules."""
 
-    def __init__(self, datafile, variable, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
+    def __init__(self, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
         super().__init__()
         self.save_hyperparameters()
-        self.datafile = datafile
-        self.variable = variable
         self.sequence_length = sequence_length
         self.trainingsize = trainingsize
         self.valsize = valsize
@@ -171,12 +100,12 @@ class _BaseDataModule(pl.LightningDataModule):
 class AutoregressiveDataModule(_BaseDataModule):
     """Data module for spatial autoregressive (CNN-style) training."""
 
-    def __init__(self, datafile, variable, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
-        super().__init__(datafile, variable, sequence_length, trainingsize, valsize)
+    def __init__(self, data: np.ndarray, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
+        super().__init__(sequence_length=sequence_length, trainingsize=trainingsize, valsize=valsize)
+        self._raw = data
 
     def setup(self, stage=None, normalize: bool = True):
-        data = load_variable(self.datafile, self.variable)[0]
-        data = np.array(data)
+        data = np.array(self._raw)
         if normalize:
             self.norm = np.mean(data)
             data = data / self.norm
@@ -190,12 +119,12 @@ class AutoregressiveDataModule(_BaseDataModule):
 class AutoLSTMDataModule(_BaseDataModule):
     """Data module for LSTM training on 1D global-mean time series."""
 
-    def __init__(self, datafile, variable, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
-        super().__init__(datafile, variable, sequence_length, trainingsize, valsize)
+    def __init__(self, data: np.ndarray, sequence_length: int = 3, trainingsize: float = 0.8, valsize: float = 0.3):
+        super().__init__(sequence_length=sequence_length, trainingsize=trainingsize, valsize=valsize)
+        self._raw = data
 
     def setup(self, stage=None, normalize: bool = True):
-        data = load_variable(self.datafile, self.variable)[0]
-        data = np.array([datum.mean() for datum in data])
+        data = np.array([datum.mean() for datum in self._raw])
         if normalize:
             self.norm = data.mean()
             data = data / self.norm
@@ -204,3 +133,71 @@ class AutoLSTMDataModule(_BaseDataModule):
         self.training_ds = LSTMTrainingDataset(train, sequence_length=self.sequence_length)
         self.val_ds = LSTMTrainingDataset(val, sequence_length=self.sequence_length)
         return self
+
+
+class PredictAutoregressiveDataset():
+    """A PyTorch Dataset for NetCDF data."""
+
+    def __init__(
+        self,
+        data: np.ndarray,
+        sequence_length: int = 3,
+        normalize: bool = True
+    ):
+        super().__init__()
+
+        self.sequence_length = sequence_length
+        self.normalize = normalize
+
+        self.data = np.array(data)
+        self.ntimes = len(self.data)
+        self.time = list(range(self.ntimes))
+        if self.normalize:
+            self.norm = self.data.mean()
+            self.data = self.data / self.norm
+
+        # initial predictions as the first sequence_length
+        self.predictions = torch.tensor(self.data[:self.sequence_length])
+
+    def get_inputs(self):
+        """Returns the last sequence_length predictions as input."""
+        return self.predictions[-self.sequence_length:]
+
+    def add(self, value):
+        """Adds a new prediction to the dataset."""
+        self.predictions = torch.cat((self.predictions, value.unsqueeze(0)), dim=0)
+
+
+class PredictLSTMDataset():
+    """A dataset for autoregressive prediction with an LSTM model on 1D time series (e.g. global means)."""
+
+    def __init__(
+        self,
+        data: np.ndarray,
+        sequence_length: int = 3,
+        normalize: bool = True
+    ):
+        super().__init__()
+
+        self.normalize = normalize
+        self.sequence_length = sequence_length
+
+        self.data = np.array([datum.mean() for datum in data])
+        self.ntimes = len(self.data)
+        self.time = list(range(self.ntimes))
+        if self.normalize:
+            self.norm = np.mean(self.data)
+            self.data = self.data / self.norm
+
+        # initial predictions seeded from the first sequence_length timesteps
+        self.predictions = torch.tensor(self.data[:self.sequence_length], dtype=torch.float32)
+
+    def get_inputs(self):
+        """Returns the last sequence_length predictions as input of shape (1, sequence_length, 1)."""
+        return self.predictions[-self.sequence_length:].unsqueeze(0).unsqueeze(-1)  # (1, seq_len, 1)
+
+    def add(self, value):
+        """Adds a new scalar prediction to the dataset."""
+        self.predictions = torch.cat((self.predictions, value.detach().reshape(1)), dim=0)
+
+
