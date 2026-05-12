@@ -14,23 +14,23 @@ class TrainModule(pl.LightningModule):
         self.lr_factor = lr_factor
         self.lr_patience = lr_patience
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, _batch_idx):
         """The training step"""
         inputs, targets = batch
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def on_train_epoch_end(self):
         pass
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, _batch_idx):
         """Validation step"""
         inputs, targets = batch
         z = self.model(inputs)
         loss = torch.nn.functional.mse_loss(z, targets)
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def on_validation_epoch_end(self):
@@ -41,7 +41,17 @@ class TrainModule(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, factor=self.lr_factor, patience=self.lr_patience
         )
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "monitor": "val_loss"}}
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss",
+                "interval": "epoch",
+                "frequency": 1,
+                "strict": False,
+                "name": "reduce_lr_on_plateau",
+            },
+        }
 
 
 class SimpleCNN(torch.nn.Module):

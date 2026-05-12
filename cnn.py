@@ -13,10 +13,10 @@ sequence_length = 3
 
 raw_data, _, _ = load_variable("data/atmos.192101-201012.t_ref.nc", "t_ref")
 
-reload = True
-train = False
+reload = False
+train = True
 
-max_epochs = 2000
+max_epochs = 2
 learning_rate = 1e-3
 saved_chkpt_path = Path("lightning_logs/channels-3-6-1/checkpoints/epoch=4999-step=50000.ckpt")
 

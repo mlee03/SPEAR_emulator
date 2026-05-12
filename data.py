@@ -90,10 +90,16 @@ class _BaseDataModule(pl.LightningDataModule):
         )
         return train, val
 
+    def _print_split_sizes(self, train, val):
+        print(f"Training size: {len(train)}")
+        print(f"Validation size: {len(val)}")
+
     def train_dataloader(self, batch_size: int = 32):
+        """Load training data onto DataLoader"""
         return torch.utils.data.DataLoader(self.training_ds, batch_size=batch_size, shuffle=False)
 
     def val_dataloader(self, batch_size: int = 32):
+        """Load validation data onto DataLoader"""
         return torch.utils.data.DataLoader(self.val_ds, batch_size=batch_size, shuffle=False)
 
 
@@ -104,16 +110,19 @@ class AutoregressiveDataModule(_BaseDataModule):
         super().__init__(sequence_length=sequence_length, trainingsize=trainingsize, valsize=valsize)
         self._raw = data
 
-    def setup(self, stage=None, normalize: bool = True):
+    def setup(self, stage = None, normalize: bool = True):
+        """setup data"""
         data = np.array(self._raw)
         if normalize:
             self.norm = np.mean(data)
             data = data / self.norm
 
         train, val = self._split(data)
+        self._print_split_sizes(train, val)
         self.training_ds = TrainingDataset(train, sequence_length=self.sequence_length)
         self.val_ds = TrainingDataset(val, sequence_length=self.sequence_length)
         return self
+
 
 
 class AutoLSTMDataModule(_BaseDataModule):
@@ -123,13 +132,15 @@ class AutoLSTMDataModule(_BaseDataModule):
         super().__init__(sequence_length=sequence_length, trainingsize=trainingsize, valsize=valsize)
         self._raw = data
 
-    def setup(self, stage=None, normalize: bool = True):
+    def setup(self, stage = None, normalize: bool = True):
+        """setup data"""
         data = np.array([datum.mean() for datum in self._raw])
         if normalize:
             self.norm = data.mean()
             data = data / self.norm
 
         train, val = self._split(data)
+        self._print_split_sizes(train, val)
         self.training_ds = LSTMTrainingDataset(train, sequence_length=self.sequence_length)
         self.val_ds = LSTMTrainingDataset(val, sequence_length=self.sequence_length)
         return self
