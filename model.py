@@ -42,20 +42,21 @@ class TrainModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, factor=self.lr_factor, patience=self.lr_patience
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "monitor": "val_loss",
-                "interval": "epoch",
-                "frequency": 1,
-                "strict": False,
-                "name": "reduce_lr_on_plateau",
-            },
-        }
+        return optimizer
+        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #    optimizer, factor=self.lr_factor, patience=self.lr_patience
+        #)
+        #return {
+        #    "optimizer": optimizer,
+        #    "lr_scheduler": {
+        #        "scheduler": scheduler,
+        #        "monitor": "val_loss",
+        #        "interval": "epoch",
+        #        "frequency": 1,
+        #        "strict": False,
+        #        "name": "reduce_lr_on_plateau",
+        #    },
+        #}
 
 
 class SimpleCNN(torch.nn.Module):

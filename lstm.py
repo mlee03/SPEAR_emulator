@@ -18,53 +18,57 @@ sequence_length = 5
 lstm = SimpleLSTM(input_size=input_size)
 
 #read data
-data, ntimes, times = load_variable("data/atmos.192101-201012.t_ref.nc", "t_ref")
+data = load_variable("data/atmos.192101-201012.t_ref.nc", "t_ref")[0]
 data = [datum.mean() for datum in data]
 data = normalize(data)
 
-reload = False
+reload = True
 train = True
 
-max_epochs = 2
-saved_chkpt_path = None
-# saved_chkpt_path = "lightning_logs/version_0/checkpoints/epoch=4999-step=50000.ckpt"
+max_epochs = 500
+learning_rate = 1e-5
+saved_chkpt_path = "/home/Mikyung.Lee/spear-emulator-me/lstm-test/version_1/checkpoints/epoch=3999-step=40000.ckpt"
+
 
 if reload:
     if saved_chkpt_path is None:
         raise ValueError("Set saved_chkpt_path before using reload=True")
     model = TrainModule.load_from_checkpoint(saved_chkpt_path, weights_only=False, map_location="cpu")
 else:
-    model = TrainModule(lstm)
+    model = TrainModule(lstm, learning_rate=learning_rate)
 
 if train:
-    tb_logger = TensorBoardLogger(save_dir="learning-rate-scheduler", name="")
+    tb_logger = TensorBoardLogger(save_dir="lstm-test", name="")
     trainer = pl.Trainer(
         max_epochs=max_epochs,
         logger=tb_logger,
-        enable_progress_bar=True,
-        log_every_n_steps=1,
-        num_sanity_val_steps=0,
        #fast_dev_run=True
     )
     datamodule = AutoDataModule(sequence_length=sequence_length, TrainingDatasetClass=TrainingLSTMDataset).prepare(data)
     trainer.fit(model=model, datamodule=datamodule)
 
+    #plot training plot    
+    inputs, targets = next(iter(datamodule.train_dataloader(batch_size=len(datamodule.train_dataset))))
+    with torch.no_grad():
+        z = model.model(inputs)
+    fig1, ax = plt.subplots()
+    ax.plot(targets.detach(), color='black', label='actual')
+    ax.plot(z.detach(), color='pink', label='training fit')  
+    ax.legend()  
+
+    #  validation plot
+    inputs, targets = next(iter(datamodule.val_dataloader(batch_size=len(datamodule.val_dataset))))
+    with torch.no_grad():
+        z = model.model(inputs)
+    fig2, ax = plt.subplots()
+    ax.plot(targets.detach(), color='black', label='actual')
+    ax.plot(z.detach(), color='pink', label='validation fit')
+    ax.legend()
+
 
 # evaluate
 model.model.eval()
 model.model.cpu()
-
-
-#first evaluation
-datamodule = AutoDataModule(sequence_length=sequence_length, train_size=0.999, val_size=0.001, TrainingDatasetClass=TrainingLSTMDataset).prepare(data)
-inputs, targets = next(iter(datamodule.train_dataloader(batch_size=len(datamodule.train_dataset))))
-with torch.no_grad():
-    z = model.model(inputs)
-        
-fig1, ax = plt.subplots()
-ax.plot(targets.detach(), color='black', label='actual')
-ax.plot(z.detach(), color='pink', label='fitted')
-ax.legend()
 
 
 #second evaluation
@@ -75,17 +79,16 @@ with torch.no_grad():
         z = model.model(inputs)
         datamodule.add(z)
         
-fig2, ax = plt.subplots()
+fig3, ax = plt.subplots()
 ax.plot(datamodule.time, datamodule.data, label='actual')
 ax.plot(datamodule.time, datamodule.predictions.detach().numpy(), label='predicted')
 ax.legend()
-ax.set_xlabel('time')
-ax.set_ylabel('value')
 
 if train:
     if hasattr(trainer.logger, "experiment") and hasattr(trainer.logger.experiment, "add_figure"):
-        trainer.logger.experiment.add_figure("fits", fig1, global_step=trainer.global_step)
-        trainer.logger.experiment.add_figure("predictions", fig2, global_step=trainer.global_step)
+        trainer.logger.experiment.add_figure("training", fig1, global_step=trainer.global_step)
+        trainer.logger.experiment.add_figure("validation", fig2, global_step=trainer.global_step)
+        trainer.logger.experiment.add_figure("evaluation", fig3, global_step=trainer.global_step)
         trainer.logger.experiment.flush()
 else:
     plt.show()

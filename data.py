@@ -1,7 +1,7 @@
-import numpy as np
 from pathlib import Path
 
 import lightning as pl
+import numpy as np
 import torch
 import xarray as xr
 from sklearn.model_selection import train_test_split
@@ -19,7 +19,7 @@ def load_variable(datafile: str | Path, variable: str) -> tuple[np.ndarray, int,
 def normalize(data):
     """Normalize data by mean"""
     data = np.array(data)
-    return data/data.mean()
+    return data / data.mean()
 
 
 class TrainingAutoregressiveDataset(torch.utils.data.Dataset):
@@ -39,9 +39,9 @@ class TrainingAutoregressiveDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         """
-        for example sequence_length=3, idx=3, returns 
+        for example sequence_length=3, idx=3, returns
         inputs = [data[3], data[4], data[5]]
-        target = data[6] 
+        target = data[6]
         """
         return self.data[idx:idx+self.sequence_length], self.data[idx+self.sequence_length]
 
@@ -78,8 +78,14 @@ class TrainingLSTMDataset(torch.utils.data.Dataset):
 class AutoDataModule(pl.LightningDataModule):
     """Data module for LSTM training on 1D global-mean time series."""
 
-    def __init__(self, sequence_length: int = 3, train_size: float = 0.8, val_size: float = 0.3, TrainingDatasetClass: torch.utils.data.Dataset = TrainingLSTMDataset):
-        super().__init__()        
+    def __init__(
+        self,
+        sequence_length: int = 3,
+        train_size: float = 0.8,
+        val_size: float = 0.3,
+        TrainingDatasetClass: torch.utils.data.Dataset = TrainingLSTMDataset,
+    ):
+        super().__init__()
         self.sequence_length = sequence_length
         self.train_size = train_size
         self.val_size = val_size
@@ -104,7 +110,7 @@ class AutoDataModule(pl.LightningDataModule):
 
         return self
         
-    def setup(self, stage = None):
+    def setup(self, stage=None):
         """setup data"""
 
         self.train_dataset = self.TrainingDatasetClass(self.train_data, sequence_length=self.sequence_length)
@@ -119,7 +125,7 @@ class AutoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(self.val_dataset, batch_size=batch_size, shuffle=False)
 
 
-class PredictAutoregressiveDataset():
+class PredictAutoregressiveDataset:
     """A PyTorch Dataset for NetCDF data."""
 
     def __init__(
@@ -147,7 +153,7 @@ class PredictAutoregressiveDataset():
         self.predictions = torch.cat((self.predictions, value.unsqueeze(0)), dim=0)
 
 
-class PredictLSTMDataset():
+class PredictLSTMDataset:
     """A dataset for autoregressive prediction with an LSTM model on 1D time series (e.g. global means)."""
 
     def __init__(
